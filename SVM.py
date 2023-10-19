@@ -49,44 +49,74 @@ def prepare_data(df):
       
    return X_0, X_1, y
     
-def run_SVM(X_train, y_train, X_val, y_val, X_test, y_test):
-    # Step 4: Hyperparameter Tuning with Validation Set
+def tune_and_evaluate_svm(X_train, y_train, X_val, y_val, X_test, y_test):
+    # Define the hyperparameters grid
     param_grid = {
         'C': [0.1, 1, 10],           # Regularization parameter
         'kernel': ['linear', 'rbf']  # Kernel type
     }
 
-    svm_classifier = svm.SVC()
-    grid_search = GridSearchCV(svm_classifier, param_grid, cv=10)
-    grid_search.fit(X_train, y_train)
+    best_svm = None
+    best_score = 0
 
-    # Get the best SVM model with tuned hyperparameters
-    best_svm = grid_search.best_estimator_
+    # Perform hyperparameter tuning and evaluation in a loop
+    for C in param_grid['C']:
+        for kernel in param_grid['kernel']:
+            # Initialize SVM classifier
+            svm_classifier = SVC(C=C, kernel=kernel, gamma='scale', probability=True, cache_size=2000)
 
-    # Step 8: Model Evaluation on Validation Set (optional)
-    y_val_pred = best_svm.predict(X_val)
+            # Train the SVM classifier
+            svm_classifier.fit(X_train, y_train)
 
-    # Step 9: Model Evaluation on Test Set
+            # Evaluate on the validation set
+            y_val_pred = svm_classifier.predict(X_val)
+            score = accuracy_score(y_val, y_val_pred)
+
+            # Update the best model if this configuration has a higher accuracy
+            if score > best_score:
+                best_score = score
+                best_svm = svm_classifier
+
+    # Evaluate the best model on the test set
     y_test_pred = best_svm.predict(X_test)
+    accuracy = accuracy_score(y_test, y_test_pred)
+    f1 = f1_score(y_test, y_test_pred)
 
-    # Evaluate the model's performance on the validation set
-    validation_report = classification_report(y_val, y_val_pred, digits=5)
-    print("Validation Report:")
-    print(validation_report)
-
-    # Evaluate the model's performance on the test set
-    test_report = classification_report(y_test, y_test_pred, digits=5)
-    print("\nTest Report:")
-    print(test_report)
+    # Return the best model, its test set accuracy, and F1-score
+    return best_svm, accuracy, f1
     
-    print(best_svm)
-
 X_0, X_1, y_1 = prepare_data(df_train)
 X_00, X_11, y_11 = prepare_data(df_val)
 X_000, X_111, y_111 = prepare_data(df_test)
 
-print('METHOD FULL')
-run_SVM(X_0, y_1, X_00, y_11, X_000, y_111)
+# Define the range for methods
+methods = range(0, 1)
 
-print('METHOD ADD')
-run_SVM(X_1, y_1, X_11, y_11, X_111, y_111)
+# Create a dictionary to store the best models and their metrics
+best_models = {}
+
+for method in methods:
+    print(f'METHOD {method}')
+    
+    # Prepare the data for the current method
+    X_train = globals()[f'X_{method}']
+    y_train = y_1
+    X_val = globals()[f'X_{method}{method}']
+    y_val = y_11
+    X_test = globals()[f'X_{method}{method}{method}']
+    y_test = y_111
+    
+    # Tune and evaluate the SVM for the current method
+    best_svm, test_accuracy, test_f1 = tune_and_evaluate_svm(X_train, y_train, X_val, y_val, X_test, y_test)
+
+    # Print the best SVM model parameters
+    print("Best SVM Model Parameters:")
+    print(best_svm)
+
+    # Print the test set accuracy and F1-score
+    print(f"Best SVM Model - Test Accuracy: {test_accuracy:.5f}")
+    print(f"Best SVM Model - Test F1-Score: {test_f1:.5f}")
+
+    # Save the best model
+    joblib.dump(best_svm, f'method{method}.pkl')
+    
